@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import os
-import asyncio
+
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Update
@@ -10,8 +11,8 @@ from config import (
     LOG_FILE,
     LOG_FORMAT,
     TELEGRAM_BOT_TOKEN,
-    update_default_stocks,
     set_stock_update_callback,
+    update_default_stocks,
 )
 from database import Database
 from stock_service import StockService
@@ -241,8 +242,8 @@ async def start_web_server():
     return runner
 
 
-def main() -> None:
-    """Start the bot."""
+async def main_async() -> None:
+    """Async implementation of the bot's main function."""
     # Create the Application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -262,21 +263,63 @@ def main() -> None:
     # Schedule periodic updates
     scheduler.add_job(send_stock_updates, "interval", hours=2, args=[application])
 
-    # Start both the scheduler and the bot in the same event loop
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        close_loop=False,  # Keep the event loop open for the scheduler
-    )
+    # Start the scheduler
     scheduler.start()
 
-    try:
-        # Start the web server in the same event loop
-        loop = asyncio.get_event_loop()
-        loop.create_task(start_web_server())
+    # Set up webhook instead of polling to avoid conflicts
+    webhook_url = os.environ.get("WEBHOOK_URL")
+    port = int(os.environ.get("PORT", 8080))
 
-        loop.run_forever()
-    except KeyboardInterrupt:
+    # Start the web server in the same event loop
+    runner = await start_web_server()
+
+    try:
+        if webhook_url:
+            # Use webhook mode when WEBHOOK_URL is provided
+            await application.initialize()
+            await application.start()
+            await application.updater.start_webhook(
+                listen="0.0.0.0",
+                port=port,
+                url_path=TELEGRAM_BOT_TOKEN,
+                webhook_url=f"{webhook_url}/{TELEGRAM_BOT_TOKEN}",
+                allowed_updates=Update.ALL_TYPES,
+            )
+            logger.info(f"Bot started in webhook mode on port {port}")
+
+            # Keep the application running
+            while True:
+                await asyncio.sleep(3600)  # Sleep for an hour
+        else:
+            # Fallback to polling mode for local development
+            await application.initialize()
+            await application.start()
+            await application.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,  # Important: Drop pending updates to avoid conflicts
+            )
+            logger.info("Bot started in polling mode")
+
+            # Keep the application running
+            while True:
+                await asyncio.sleep(3600)  # Sleep for an hour
+    except (KeyboardInterrupt, SystemExit):
+        # Shutdown gracefully
         scheduler.shutdown()
+        await application.stop()
+        await runner.cleanup()
+
+
+def main() -> None:
+    """Start the bot by running the async main function in an event loop."""
+    try:
+        # Create and run the event loop
+        asyncio.run(main_async())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Error in main function: {e}")
+        raise
 
 
 if __name__ == "__main__":
