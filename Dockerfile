@@ -41,5 +41,8 @@ RUN chmod -R 777 /app/logs
 # Switch to non-root user
 USER botuser
 
+# Expose port
+EXPOSE 8080
+
 # Run the bot
 CMD ["python", "bot.py"]
