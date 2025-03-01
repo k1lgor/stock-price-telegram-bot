@@ -28,5 +28,17 @@ RUN mkdir -p logs
 # Copy environment variables
 COPY .env ./
 
+# Create a non-root user and group
+RUN groupadd -r botuser && useradd -r -g botuser botuser
+
+# Set ownership and permissions
+RUN chown -R botuser:botuser /app
+RUN chmod -R 755 /app
+RUN chmod 644 /app/.env
+RUN chmod -R 777 /app/logs
+
+# Switch to non-root user
+USER botuser
+
 # Run the bot
 CMD ["python", "bot.py"]
