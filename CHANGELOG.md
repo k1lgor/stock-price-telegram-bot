@@ -2,6 +2,15 @@
 
 All notable changes to the Stock Price Notification Bot will be documented in this file.
 
+## [0.3.0] - 2024-05-15
+
+### Added
+
+- Implemented webhook support to avoid conflicts with Telegram polling
+- Added fallback to polling mode for local development
+- Improved application startup and shutdown process
+- Enhanced error handling for webhook mode
+
 ## [0.2.0] - 2024-01-25
 
 ### Added
