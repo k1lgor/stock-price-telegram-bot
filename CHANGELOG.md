@@ -2,6 +2,15 @@
 
 All notable changes to the Stock Price Notification Bot will be documented in this file.
 
+## [0.2.0] - 2024-01-25
+
+### Added
+
+- Added web server for health checks on Render deployment
+- Improved error handling for stock updates
+- Enhanced logging for better debugging
+- Added support for asynchronous web server
+
 ## [0.1.0] - 2024-01-17
 
 ### Added
