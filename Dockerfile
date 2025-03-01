@@ -1,15 +1,16 @@
-# Use Python 3.11 slim as base image
-FROM python:3.11-slim as builder
+# Use Python 3.11 Alpine as base image
+FROM python:3.11-alpine as builder
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-  curl \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+  gcc \
+  musl-dev \
+  python3-dev \
+  libffi-dev \
+  openssl-dev
 
-# Install Poetry and add to PATH
-RUN curl -sSL https://install.python-poetry.org | python3 - && \
-  export PATH="/root/.local/bin:$PATH" && \
-  echo 'export PATH="/root/.local/bin:$PATH"' >> /root/.bashrc
+# Install Poetry via pip
+RUN pip install poetry
 
 # Set working directory
 WORKDIR /app
@@ -29,7 +30,7 @@ RUN mkdir -p logs
 COPY .env ./
 
 # Create a non-root user and group
-RUN groupadd -r botuser && useradd -r -g botuser botuser
+RUN addgroup -S botuser && adduser -S botuser -G botuser
 
 # Set ownership and permissions
 RUN chown -R botuser:botuser /app
