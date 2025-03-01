@@ -1,5 +1,7 @@
 import logging
-
+import os
+import asyncio
+from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -219,6 +221,26 @@ async def send_stock_updates(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.error(f"Error sending update to user {user_id}: {e}")
 
 
+async def health_check(request):
+    """Simple health check endpoint for Render."""
+    return web.Response(text="Bot is running!", status=200)
+
+
+async def start_web_server():
+    """Start a simple web server for health checks."""
+    app = web.Application()
+    app.add_routes([web.get("/", health_check)])
+
+    port = int(os.environ.get("PORT", 8080))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    logger.info(f"Web server started on port {port}")
+    return runner
+
+
 def main() -> None:
     """Start the bot."""
     # Create the Application
@@ -248,9 +270,11 @@ def main() -> None:
     scheduler.start()
 
     try:
-        import asyncio
+        # Start the web server in the same event loop
+        loop = asyncio.get_event_loop()
+        loop.create_task(start_web_server())
 
-        asyncio.get_event_loop().run_forever()
+        loop.run_forever()
     except KeyboardInterrupt:
         scheduler.shutdown()
 
