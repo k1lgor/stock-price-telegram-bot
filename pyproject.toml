@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "stock_notification"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Telegram bot for monitoring stock prices of major tech companies"
 authors = ["Plamen Ivanov <paco.iwanow@gmail.com>"]
 
