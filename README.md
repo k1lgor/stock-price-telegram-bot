@@ -5,7 +5,7 @@ A Telegram bot that monitors stock prices of major tech companies and sends peri
 ## Features
 
 - Monitor stock prices of major tech companies (Apple, Microsoft, Amazon, Google, Tesla)
-- Periodic notifications (every 2 hours by default)
+- Periodic notifications (every 2 hours by default; server self-pings every 14 minutes to stay awake on Render.com)
 - Subscribe/unsubscribe to specific stocks
 - Manual stock price checking
 - Customizable notification frequency
@@ -42,6 +42,7 @@ A Telegram bot that monitors stock prices of major tech companies and sends peri
 
    ```bash
    TELEGRAM_BOT_TOKEN=your_bot_token_here
+   SELF_PING_URL=https://your-app-name.onrender.com/
    ```
 
 5. Run the bot:
