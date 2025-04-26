@@ -4,6 +4,7 @@ import os
 
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from requests import get  # Add this import at the top
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -93,14 +94,27 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Check current price of a stock or all subscribed stocks."""
+    user_id = str(update.effective_user.id)
     if not context.args:
-        await update.message.reply_text(
-            "Please provide a stock symbol or 'all'. Example: /check AAPL or /check all"
-        )
+        # No arguments: show all subscribed stocks
+        stocks = db.get_subscribed_stocks(user_id)
+        if not stocks:
+            await update.message.reply_text("You're not subscribed to any stocks.")
+            return
+
+        stocks_info = StockService.get_multiple_stocks_info(stocks)
+        if not stocks_info:
+            await update.message.reply_text("Could not fetch data for your stocks.")
+            return
+
+        message = "📊 Current Stock Prices\n\n"
+        for symbol, info in stocks_info.items():
+            message += StockService.format_stock_message(info) + "\n"
+
+        await update.message.reply_text(message)
         return
 
     symbol = context.args[0].upper()
-    user_id = str(update.effective_user.id)
 
     if symbol == "ALL":
         stocks = db.get_subscribed_stocks(user_id)
@@ -261,7 +275,12 @@ async def main_async() -> None:
     set_stock_update_callback(db.refresh_default_stocks)
 
     # Schedule periodic updates
-    scheduler.add_job(send_stock_updates, "interval", hours=2, args=[application])
+    scheduler.add_job(
+        send_stock_updates, "interval", minutes=120, args=[application]
+    )  # <-- changed from 14 to 120
+
+    # Schedule self-ping every 14 minutes (to keep Render.com alive)
+    scheduler.add_job(self_ping, "interval", minutes=14)
 
     # Start the scheduler
     scheduler.start()
@@ -308,6 +327,21 @@ async def main_async() -> None:
         scheduler.shutdown()
         await application.stop()
         await runner.cleanup()
+
+
+SELF_PING_URL = os.environ.get(
+    "SELF_PING_URL"
+)  # Add this after your other config loads
+
+
+def self_ping():
+    """Ping the server itself to prevent idling (for Render.com)."""
+    if SELF_PING_URL:
+        try:
+            get(SELF_PING_URL, timeout=10)
+            logger.info("Self-ping successful.")
+        except Exception as e:
+            logger.warning(f"Self-ping failed: {e}")
 
 
 def main() -> None:
