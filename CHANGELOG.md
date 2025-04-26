@@ -2,6 +2,18 @@
 
 All notable changes to the Stock Price Notification Bot will be documented in this file.
 
+## [0.4.0] - 2024-04-27
+
+### Added
+
+- Implemented self-ping feature to keep the server alive on Render.com (pings every 14 minutes)
+- Updated scheduler to send stock notifications every 2 hours by default
+- Improved documentation for deployment on Render.com
+
+### Changed
+
+- `/check` command now shows all subscribed stocks if used without arguments
+
 ## [0.3.0] - 2024-05-15
 
 ### Added
