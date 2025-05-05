@@ -1,11 +1,20 @@
 import os
 
-
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
+# Required environment variables
+REQUIRED_ENV_VARS = ["TELEGRAM_BOT_TOKEN"]
+
+# Validate required environment variables
+missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+if missing_vars:
+    raise ValueError(
+        f"Missing required environment variables: {', '.join(missing_vars)}"
+    )
+    
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
