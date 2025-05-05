@@ -1,7 +1,10 @@
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
+import backoff
+import requests
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
@@ -10,7 +13,11 @@ logger = logging.getLogger(__name__)
 class StockService:
     """Service for fetching and processing stock data using Yahoo Finance API."""
 
-    @staticmethod
+    @backoff.on_exception(
+        backoff.expo,
+        (requests.exceptions.RequestException, Exception),
+        max_tries=3,
+    )
     def get_stock_info(symbol: str) -> Optional[Dict]:
         """Get current stock information for a given symbol.
 
@@ -61,11 +68,43 @@ class StockService:
         Returns:
             Dictionary mapping symbols to their stock information
         """
+        if not symbols:
+            return {}
+
+        # Use yfinance's multi-ticker functionality
+        tickers = yf.Tickers(" ".join(symbols))
+
         results = {}
         for symbol in symbols:
-            info = StockService.get_stock_info(symbol)
-            if info:
-                results[symbol] = info
+            try:
+                ticker = tickers.tickers[symbol]
+                info = ticker.info
+
+                current_price = info.get("currentPrice")
+                previous_close = info.get("previousClose")
+
+                if not current_price or not previous_close:
+                    logger.warning(f"Incomplete data for {symbol}")
+                    continue
+
+                price_change = current_price - previous_close
+                price_change_percent = (price_change / previous_close) * 100
+
+                results[symbol] = {
+                    "symbol": symbol,
+                    "name": info.get("longName", symbol),
+                    "current_price": current_price,
+                    "previous_close": previous_close,
+                    "price_change": price_change,
+                    "price_change_percent": price_change_percent,
+                    "currency": info.get("currency", "USD"),
+                    "market_cap": info.get("marketCap"),
+                    "volume": info.get("volume"),
+                    "timestamp": datetime.now().isoformat(),
+                }
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}")
+
         return results
 
     @staticmethod
@@ -105,10 +144,21 @@ class StockService:
         Returns:
             True if valid, False otherwise
         """
+        if not symbol or not isinstance(symbol, str):
+            return False
+
+        # Check for valid stock symbol format
+        if not re.match(r"^[A-Z0-9.-]{1,8}$", symbol):
+            return False
+
         try:
             stock = yf.Ticker(symbol)
             info = stock.info
-            return "regularMarketPrice" in info
+            return (
+                info
+                and "regularMarketPrice" in info
+                and info.get("regularMarketPrice") is not None
+            )
         except Exception as e:
             logger.error(f"Error validating symbol {symbol}: {e}")
             return False
