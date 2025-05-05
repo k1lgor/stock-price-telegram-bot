@@ -1,9 +1,13 @@
 import asyncio
+import datetime
+import json
 import logging
 import os
+import time
 
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from cachetools import TTLCache
 from requests import get  # Add this import at the top
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -29,6 +33,32 @@ logger = logging.getLogger(__name__)
 # Initialize database and scheduler
 db = Database()
 scheduler = AsyncIOScheduler()
+
+# Rate limiting cache: user_id -> last_command_time
+command_cache = TTLCache(maxsize=1000, ttl=60)  # 1 minute cooldown
+
+
+def rate_limit_decorator(func):
+    """Decorator to apply rate limiting to commands."""
+
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        current_time = time.time()
+
+        # Check if user has issued a command recently
+        if user_id in command_cache:
+            last_time = command_cache[user_id]
+            if current_time - last_time < 3:  # 3 seconds between commands
+                await update.message.reply_text(
+                    "Please wait a moment before using another command."
+                )
+                return
+
+        # Update cache and proceed
+        command_cache[user_id] = current_time
+        return await func(update, context)
+
+    return wrapper
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -92,6 +122,7 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"You're not subscribed to {symbol}")
 
 
+@rate_limit_decorator
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Check current price of a stock or all subscribed stocks."""
     user_id = str(update.effective_user.id)
@@ -166,9 +197,16 @@ async def set_frequency(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     try:
-        hours = int(context.args[0])
-        if hours < 1:
-            await update.message.reply_text("Frequency must be at least 1 hour.")
+        hours = float(context.args[0])
+
+        # More comprehensive validation
+        if not hours.is_integer():
+            await update.message.reply_text("Frequency must be an integer.")
+            return
+
+        hours = int(hours)
+        if hours < 1 or hours > 24:
+            await update.message.reply_text("Frequency must be between 1 and 24 hours.")
             return
 
         user_id = str(update.effective_user.id)
@@ -237,8 +275,53 @@ async def send_stock_updates(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def health_check(request):
-    """Simple health check endpoint for Render."""
-    return web.Response(text="Bot is running!", status=200)
+    """Enhanced health check endpoint."""
+    try:
+        # Verify database connection
+        db.get_all_users()
+
+        # Check YFinance API
+        test_symbol = "AAPL"
+        stock_info = StockService.get_stock_info(test_symbol)
+
+        if stock_info:
+            return web.Response(
+                text=json.dumps(
+                    {
+                        "status": "healthy",
+                        "database": "connected",
+                        "api": "connected",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                ),
+                content_type="application/json",
+                status=200,
+            )
+        else:
+            return web.Response(
+                text=json.dumps(
+                    {
+                        "status": "degraded",
+                        "database": "connected",
+                        "api": "error",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                ),
+                content_type="application/json",
+                status=200,
+            )
+    except Exception as e:
+        return web.Response(
+            text=json.dumps(
+                {
+                    "status": "unhealthy",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat(),
+                }
+            ),
+            content_type="application/json",
+            status=500,
+        )
 
 
 async def start_web_server():
