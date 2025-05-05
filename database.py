@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from typing import Dict, List, Set
-
+import shutil
 from config import DEFAULT_NOTIFICATION_FREQUENCY, DEFAULT_STOCKS
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,12 @@ class Database:
     def save_data(self) -> None:
         """Save user data to the JSON file."""
         try:
+            # Create a backup first
+            if os.path.exists(self.db_file):
+                backup_file = f"{self.db_file}.bak"
+                shutil.copy2(self.db_file, backup_file)
+
+            # Now save the new data
             with open(self.db_file, "w") as f:
                 json.dump(self.users, f, indent=2)
             logger.info(f"Saved data for {len(self.users)} users to {self.db_file}")
